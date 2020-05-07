@@ -27,7 +27,7 @@ from base64 import b64decode
 
 INFO_FILE_NAME = ".sublime-lambda-info"
 SETTINGS_PATH = "awslambda"
-DEBUG = True
+DEBUG = False
 
 
 def _dbg(*msgs):
