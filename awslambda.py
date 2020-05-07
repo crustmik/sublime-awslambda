@@ -27,7 +27,7 @@ from base64 import b64decode
 
 INFO_FILE_NAME = ".sublime-lambda-info"
 SETTINGS_PATH = "awslambda"
-DEBUG = False
+DEBUG = True
 
 
 def _dbg(*msgs):
@@ -70,7 +70,8 @@ class AWSClient():
             # this profile name appears to not exist
             _dbg("Got bogus AWS profile name {}, resetting...".format(profile_name))
             profile_name = None
-        session = boto3.session.Session(profile_name=profile_name)
+        region_name = self.get_region_name()
+        session = boto3.session.Session(profile_name=profile_name, region_name=region_name)
         globals()['_aws_session'] = session
         return session
 
@@ -87,13 +88,22 @@ class AWSClient():
             return sess._session.available_profiles
         return sess.available_profiles()
 
+    def get_available_regions(self):
+        sess = boto3.session.Session(profile_name=None)
+        if not sess:
+            return []
+        return sess._session.get_available_regions("lambda")
+
     def get_profile_name(self):
         """Get selected profile name."""
         return self._settings().get("profile_name")
 
+    def get_region_name(self):
+        return self._settings().get("region_name")
+
     def test_aws_credentials_exist(self):
         """Check if AWS credentials are available."""
-        session = boto3.session.Session()
+        session = boto3.session.Session(self.get_profile_name())
         if session.get_credentials():
             return True
         return False
@@ -160,6 +170,21 @@ class LambdaClient(AWSClient):
             self._clear_client()
             window.status_message("Using AWS profile {}".format(profile))
         window.show_quick_panel(profiles, profile_selected_cb)
+
+    def select_aws_region(self, window):
+        """ Selects an AWS region """
+        regions = self.get_available_regions()
+        def regions_selected_cb(selected_index):
+            if selected_index == -1:
+                # cancelled
+                return
+            region = regions[selected_index]
+            if not region:
+                return
+            self._settings().set("region_name", region)
+            self._clear_client()
+            window.status_message("Using AWS region {}".format(region))
+        window.show_quick_panel(regions, regions_selected_cb)
 
     def download_function(self, function):
         """Download source to a function and open it in a new window."""
@@ -584,3 +609,11 @@ class SelectProfileCommand(sublime_plugin.WindowCommand, LambdaClient):
         if len(profiles) > 1:
             return True
         return False
+
+class SelectRegionCommand(sublime_plugin.WindowCommand, LambdaClient):
+    """Select an AWS configuration profile to use and save in settings."""
+
+    def run(self):
+        """Display choices in a quick panel."""
+        # self.select_aws_profile(self.window)
+        self.select_aws_region(self.window)
